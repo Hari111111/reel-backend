@@ -128,6 +128,32 @@ export const uploadImage = asyncHandler(async (req, res) => {
   });
 });
 
+export const uploadPostImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400);
+    throw new Error("No image uploaded");
+  }
+
+  ensureCloudinaryConfigured();
+
+  const uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
+    resource_type: "image",
+    folder: `reel-app/posts/${req.user._id}`,
+    public_id: `post-${req.user._id}-${Date.now()}`,
+    transformation: [
+      { width: 1200, height: 1500, crop: "limit" },
+      { quality: "auto" },
+      { fetch_format: "auto" }
+    ]
+  });
+
+  res.json({
+    imageUrl: uploadResult.secure_url,
+    imagePublicId: uploadResult.public_id,
+    uploaded: true
+  });
+});
+
 export const uploadVideo = asyncHandler(async (req, res) => {
   if (!req.file) {
     res.status(400);

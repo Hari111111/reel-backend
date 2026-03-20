@@ -9,6 +9,8 @@ import adminRoutes from "./routes/adminRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import debugRoutes from "./routes/debugRoutes.js";
+import postRoutes from "./routes/postRoutes.js";
+import statusRoutes from "./routes/statusRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -36,6 +38,8 @@ app.use("/api/test", testRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/videos", videoRoutes);
+app.use("/api/posts", postRoutes);
+app.use("/api/statuses", statusRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use(notFound);
