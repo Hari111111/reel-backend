@@ -3,8 +3,9 @@ import { Server } from "socket.io";
 export const initializeSocket = (httpServer) => {
   const io = new Server(httpServer, {
     cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
+      origin: true,
+      methods: ["GET", "POST"],
+      allowedHeaders: ["Content-Type", "Authorization"]
     }
   });
 

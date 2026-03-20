@@ -23,7 +23,39 @@ const httpServer = createServer(app);
 // Initialize Socket.IO
 const io = initializeSocket(httpServer);
 
-app.use(cors({ origin: "*" }));
+const configuredOrigins = env.clientUrl
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (
+      configuredOrigins.includes(origin) ||
+      /^https?:\/\/localhost(?::\d+)?$/i.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(origin) ||
+      /^https?:\/\/192\.168\.\d+\.\d+(?::\d+)?$/i.test(origin) ||
+      /^exp:\/\/.+/i.test(origin) ||
+      /^expo:\/\/.+/i.test(origin)
+    ) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, true);
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
 
