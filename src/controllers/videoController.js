@@ -31,7 +31,9 @@ export const createVideo = asyncHandler(async (req, res) => {
     user: req.user._id,
     caption: req.body.caption,
     videoUrl: req.body.videoUrl,
+    videoPublicId: req.body.videoPublicId,
     thumbnailUrl: req.body.thumbnailUrl,
+    thumbnailPublicId: req.body.thumbnailPublicId,
     duration: req.body.duration,
     tags: req.body.tags || []
   });

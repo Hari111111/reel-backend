@@ -9,9 +9,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true, minlength: 6, select: false },
     bio: { type: String, default: "" },
     avatarUrl: { type: String, default: "" },
-    avatarBuffer: { type: Buffer, default: null }, // Store image locally
-    avatarMimeType: { type: String, default: "" }, // Store image mime type
-    cloudinaryPublicId: { type: String, default: "" }, // Cloudinary reference
+    cloudinaryPublicId: { type: String, default: "" },
     followersCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
     videosCount: { type: Number, default: 0 },

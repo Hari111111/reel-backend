@@ -1,10 +1,16 @@
 import { Router } from "express";
-import { uploadImage, uploadMiddleware } from "../controllers/uploadController.js";
+import {
+  uploadImage,
+  uploadImageMiddleware,
+  uploadVideo,
+  uploadVideoMiddleware
+} from "../controllers/uploadController.js";
 import { protect } from "../middleware/auth.js";
 
 const router = Router();
 
 router.use(protect);
-router.post("/image", uploadMiddleware, uploadImage);
+router.post("/image", uploadImageMiddleware, uploadImage);
+router.post("/video", uploadVideoMiddleware, uploadVideo);
 
 export default router;

@@ -1,32 +1,87 @@
 import asyncHandler from "express-async-handler";
-import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
+import cloudinary from "../config/cloudinary.js";
 import { User } from "../models/User.js";
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+const storage = multer.memoryStorage();
+const videoFieldNames = new Set(["video", "file", "media", "asset"]);
+
+const isVideoLikeFile = (file) => {
+  if (!file) {
+    return false;
+  }
+
+  if (file.mimetype?.startsWith("video/")) {
+    return true;
+  }
+
+  return /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(file.originalname || "");
+};
+
+const imageUpload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error("Only image files are allowed"), false);
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  }
 });
 
-// Configure multer for memory storage
-const storage = multer.memoryStorage();
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith("image/")) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only image files are allowed"), false);
+const videoUpload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (isVideoLikeFile(file)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error("Only video files are allowed"), false);
+  },
+  limits: {
+    fileSize: 100 * 1024 * 1024
+  }
+});
+
+const normalizeUploadedVideo = (req, res, next) => {
+  const files = Array.isArray(req.files) ? req.files : [];
+  const preferredFile =
+    files.find((file) => videoFieldNames.has(file.fieldname) && isVideoLikeFile(file)) ||
+    files.find(isVideoLikeFile);
+
+  if (preferredFile) {
+    req.file = preferredFile;
+  }
+
+  next();
+};
+
+const ensureCloudinaryConfigured = () => {
+  const { cloud_name, api_key, api_secret } = cloudinary.config();
+
+  if (!cloud_name || !api_key || !api_secret) {
+    throw new Error("Cloudinary is not configured on the server");
   }
 };
 
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-});
+const uploadBufferToCloudinary = (buffer, options) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(result);
+    });
+
+    stream.end(buffer);
+  });
 
 export const uploadImage = asyncHandler(async (req, res) => {
   if (!req.file) {
@@ -34,97 +89,79 @@ export const uploadImage = asyncHandler(async (req, res) => {
     throw new Error("No file uploaded");
   }
 
-  try {
-    const userId = req.user._id;
-    const imageBuffer = req.file.buffer;
-    const mimeType = req.file.mimetype;
+  ensureCloudinaryConfigured();
 
-    // Store image locally in database first
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        avatarBuffer: imageBuffer,
-        avatarMimeType: mimeType,
-        avatarUrl: `/api/users/${userId}/avatar`, // Local endpoint
-      },
-      { new: true }
-    );
-
-    if (!user) {
-      res.status(404);
-      throw new Error("User not found");
-    }
-
-    // Try to upload to Cloudinary in background (non-blocking)
-    uploadToCloudinary(userId, imageBuffer, mimeType).catch(console.error);
-
-    res.json({
-      url: `/api/users/${userId}/avatar`, // Local URL
-      localUrl: `/api/users/${userId}/avatar`,
-      uploaded: true,
-      message: "Image stored locally. Cloudinary sync in progress."
-    });
-
-  } catch (error) {
-    res.status(500);
-    throw new Error("Image upload failed");
-  }
-});
-
-// Background function to upload to Cloudinary
-async function uploadToCloudinary(userId, imageBuffer, mimeType) {
-  try {
-    // Check if Cloudinary is configured
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
-      console.log("Cloudinary not configured, skipping upload");
-      return;
-    }
-
-    const result = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        {
-          resource_type: "image",
-          folder: "reel-app/avatars",
-          transformation: [
-            { width: 200, height: 200, crop: "fill" },
-            { quality: "auto" },
-            { fetch_format: "auto" }
-          ]
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      ).end(imageBuffer);
-    });
-
-    // Update user with Cloudinary info
-    await User.findByIdAndUpdate(userId, {
-      avatarUrl: result.secure_url,
-      cloudinaryPublicId: result.public_id,
-    });
-
-    console.log(`Cloudinary upload successful for user ${userId}`);
-  } catch (error) {
-    console.error(`Cloudinary upload failed for user ${userId}:`, error);
-  }
-}
-
-export const uploadMiddleware = upload.single("image");
-
-// Serve local avatar images
-export const serveAvatar = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.userId).select("avatarBuffer avatarMimeType");
-  
-  if (!user || !user.avatarBuffer) {
+  const existingUser = await User.findById(req.user._id).select("cloudinaryPublicId");
+  if (!existingUser) {
     res.status(404);
-    throw new Error("Avatar not found");
+    throw new Error("User not found");
   }
 
-  res.set({
-    "Content-Type": user.avatarMimeType || "image/jpeg",
-    "Cache-Control": "public, max-age=86400", // Cache for 1 day
+  const uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
+    resource_type: "image",
+    folder: "reel-app/avatars",
+    public_id: `avatar-${req.user._id}-${Date.now()}`,
+    transformation: [
+      { width: 400, height: 400, crop: "fill" },
+      { quality: "auto" },
+      { fetch_format: "auto" }
+    ]
   });
 
-  res.send(user.avatarBuffer);
+  if (existingUser.cloudinaryPublicId) {
+    await cloudinary.uploader.destroy(existingUser.cloudinaryPublicId, {
+      invalidate: true,
+      resource_type: "image"
+    }).catch(() => {});
+  }
+
+  await User.findByIdAndUpdate(req.user._id, {
+    avatarUrl: uploadResult.secure_url,
+    cloudinaryPublicId: uploadResult.public_id
+  });
+
+  res.json({
+    url: uploadResult.secure_url,
+    publicId: uploadResult.public_id,
+    uploaded: true,
+    message: "Image uploaded to Cloudinary successfully."
+  });
 });
+
+export const uploadVideo = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400);
+    throw new Error("No video uploaded");
+  }
+
+  ensureCloudinaryConfigured();
+
+  const uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
+    resource_type: "video",
+    folder: `reel-app/videos/${req.user._id}`,
+    public_id: `reel-${req.user._id}-${Date.now()}`,
+    overwrite: false
+  });
+
+  const thumbnailUrl = cloudinary.url(uploadResult.public_id, {
+    resource_type: "video",
+    format: "jpg",
+    secure: true,
+    transformation: [
+      { width: 720, height: 1280, crop: "fill" },
+      { quality: "auto" }
+    ]
+  });
+
+  res.json({
+    videoUrl: uploadResult.secure_url,
+    videoPublicId: uploadResult.public_id,
+    thumbnailUrl,
+    thumbnailPublicId: uploadResult.public_id,
+    duration: Number(uploadResult.duration || 0),
+    bytes: uploadResult.bytes
+  });
+});
+
+export const uploadImageMiddleware = imageUpload.single("image");
+export const uploadVideoMiddleware = [videoUpload.any(), normalizeUploadedVideo];
