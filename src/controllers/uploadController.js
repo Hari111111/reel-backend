@@ -48,6 +48,29 @@ const videoUpload = multer({
   }
 });
 
+const chatAttachmentUpload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (
+      file.mimetype.startsWith("image/") ||
+      file.mimetype.startsWith("video/") ||
+      file.mimetype === "application/pdf" ||
+      file.mimetype.includes("document") ||
+      file.mimetype.includes("sheet") ||
+      file.mimetype.includes("presentation") ||
+      file.mimetype.startsWith("text/")
+    ) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error("Unsupported chat attachment type"), false);
+  },
+  limits: {
+    fileSize: 25 * 1024 * 1024
+  }
+});
+
 const normalizeUploadedVideo = (req, res, next) => {
   const files = Array.isArray(req.files) ? req.files : [];
   const preferredFile =
@@ -189,5 +212,37 @@ export const uploadVideo = asyncHandler(async (req, res) => {
   });
 });
 
+export const uploadChatAttachment = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400);
+    throw new Error("No attachment uploaded");
+  }
+
+  ensureCloudinaryConfigured();
+
+  const isImage = req.file.mimetype.startsWith("image/");
+  const isVideo = req.file.mimetype.startsWith("video/");
+  const resourceType = isImage ? "image" : isVideo ? "video" : "raw";
+  const messageType = isImage ? "image" : isVideo ? "video" : "file";
+
+  const uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
+    resource_type: resourceType,
+    folder: `reel-app/chat/${req.user._id}`,
+    public_id: `chat-${req.user._id}-${Date.now()}`,
+    overwrite: false
+  });
+
+  res.json({
+    uploaded: true,
+    messageType,
+    attachmentUrl: uploadResult.secure_url,
+    attachmentPublicId: uploadResult.public_id,
+    attachmentName: req.file.originalname,
+    attachmentMimeType: req.file.mimetype,
+    attachmentSize: req.file.size
+  });
+});
+
 export const uploadImageMiddleware = imageUpload.single("image");
 export const uploadVideoMiddleware = [videoUpload.any(), normalizeUploadedVideo];
+export const uploadChatAttachmentMiddleware = chatAttachmentUpload.single("file");

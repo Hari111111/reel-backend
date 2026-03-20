@@ -1,5 +1,7 @@
 import { Router } from "express";
 import {
+  uploadChatAttachment,
+  uploadChatAttachmentMiddleware,
   uploadImage,
   uploadImageMiddleware,
   uploadPostImage,
@@ -14,5 +16,6 @@ router.use(protect);
 router.post("/image", uploadImageMiddleware, uploadImage);
 router.post("/post-image", uploadImageMiddleware, uploadPostImage);
 router.post("/video", uploadVideoMiddleware, uploadVideo);
+router.post("/chat-attachment", uploadChatAttachmentMiddleware, uploadChatAttachment);
 
 export default router;

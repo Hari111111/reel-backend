@@ -13,8 +13,38 @@ const chatMessageSchema = new mongoose.Schema({
   },
   text: {
     type: String,
-    required: true,
+    default: "",
     trim: true,
+  },
+  messageType: {
+    type: String,
+    enum: ["text", "image", "video", "file", "call"],
+    default: "text",
+  },
+  attachmentUrl: {
+    type: String,
+    default: "",
+  },
+  attachmentPublicId: {
+    type: String,
+    default: "",
+  },
+  attachmentName: {
+    type: String,
+    default: "",
+  },
+  attachmentMimeType: {
+    type: String,
+    default: "",
+  },
+  attachmentSize: {
+    type: Number,
+    default: 0,
+  },
+  callType: {
+    type: String,
+    enum: ["audio", "video", ""],
+    default: "",
   },
   read: {
     type: Boolean,

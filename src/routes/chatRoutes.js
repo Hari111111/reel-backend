@@ -2,25 +2,75 @@ import express from "express";
 import asyncHandler from "express-async-handler";
 import ChatMessage from "../models/ChatMessage.js";
 import { User } from "../models/User.js";
+import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
+
+router.use(protect);
+
+const mapChatMessage = (message) => ({
+  id: String(message._id),
+  text: message.text || "",
+  sender:
+    typeof message.sender === "object" && message.sender !== null
+      ? String(message.sender._id)
+      : String(message.sender),
+  receiver:
+    typeof message.receiver === "object" && message.receiver !== null
+      ? String(message.receiver._id)
+      : String(message.receiver),
+  timestamp: message.timestamp,
+  senderName: typeof message.sender === "object" && message.sender !== null ? message.sender.username : undefined,
+  read: Boolean(message.read),
+  messageType: message.messageType || "text",
+  attachmentUrl: message.attachmentUrl || "",
+  attachmentPublicId: message.attachmentPublicId || "",
+  attachmentName: message.attachmentName || "",
+  attachmentMimeType: message.attachmentMimeType || "",
+  attachmentSize: message.attachmentSize || 0,
+  callType: message.callType || ""
+});
 
 // Send message
 router.post(
   "/messages",
   asyncHandler(async (req, res) => {
-    const { receiverId, text } = req.body;
+    const {
+      receiverId,
+      text = "",
+      messageType = "text",
+      attachmentUrl = "",
+      attachmentPublicId = "",
+      attachmentName = "",
+      attachmentMimeType = "",
+      attachmentSize = 0,
+      callType = ""
+    } = req.body;
     const senderId = req.user.id;
+
+    if (!text.trim() && !attachmentUrl) {
+      res.status(400);
+      throw new Error("Message text or attachment is required");
+    }
 
     const message = new ChatMessage({
       sender: senderId,
       receiver: receiverId,
       text,
+      messageType,
+      attachmentUrl,
+      attachmentPublicId,
+      attachmentName,
+      attachmentMimeType,
+      attachmentSize,
+      callType,
       read: false,
     });
 
     await message.save();
-    res.status(201).json(message);
+    await message.populate("sender", "name username avatarUrl");
+    await message.populate("receiver", "name username avatarUrl");
+    res.status(201).json(mapChatMessage(message));
   })
 );
 
@@ -42,7 +92,7 @@ router.get(
     .populate('sender', 'name username avatarUrl')
     .populate('receiver', 'name username avatarUrl');
 
-    res.json(messages.reverse());
+    res.json(messages.reverse().map(mapChatMessage));
   })
 );
 
