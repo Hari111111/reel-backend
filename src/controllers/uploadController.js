@@ -189,7 +189,11 @@ export const uploadVideo = asyncHandler(async (req, res) => {
     resource_type: "video",
     folder: `reel-app/videos/${req.user._id}`,
     public_id: `reel-${req.user._id}-${Date.now()}`,
-    overwrite: false
+    overwrite: false,
+    transformation: [
+      { quality: "auto:good" },
+      { fetch_format: "mp4" }
+    ]
   });
 
   const thumbnailUrl = cloudinary.url(uploadResult.public_id, {
@@ -229,7 +233,14 @@ export const uploadChatAttachment = asyncHandler(async (req, res) => {
     resource_type: resourceType,
     folder: `reel-app/chat/${req.user._id}`,
     public_id: `chat-${req.user._id}-${Date.now()}`,
-    overwrite: false
+    overwrite: false,
+    transformation: isVideo ? [
+      { quality: "auto:good" },
+      { fetch_format: "mp4" }
+    ] : isImage ? [
+      { quality: "auto" },
+      { fetch_format: "auto" }
+    ] : []
   });
 
   res.json({
